@@ -1,0 +1,139 @@
+---
+# ── 0. Docker CE ──────────────────────────────────────────────────────────────
+
+- name: Enable CRB repository (required by Docker CE on Rocky Linux 9)
+  ansible.builtin.command:
+    cmd: dnf config-manager --set-enabled crb
+  changed_when: false
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Add Docker CE repository
+  ansible.builtin.yum_repository:
+    name: docker-ce
+    description: Docker CE Stable
+    baseurl: https://download.docker.com/linux/rhel/$releasever/$basearch/stable
+    enabled: true
+    gpgcheck: true
+    gpgkey: https://download.docker.com/linux/rhel/gpg
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Install Docker CE
+  ansible.builtin.dnf:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
+
+# ── 1. Docker service ─────────────────────────────────────────────────────────
+
+- name: Start and enable Docker
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+# ── 2. Containerlab CLI ───────────────────────────────────────────────────────
+
+- name: Download Containerlab RPM from GitHub releases
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/srl-labs/containerlab/releases/download/v{{ containerlab_version }}/containerlab_{{ containerlab_version }}_linux_amd64.rpm
+    dest: /tmp/containerlab_{{ containerlab_version }}_linux_amd64.rpm
+    mode: "0644"
+  when: not (ansible_facts['ansible_local'] is defined and
+             (containerlab_topology_dir ~ '/../containerlab') is exists)
+  register: _clab_rpm_download
+
+- name: Install Containerlab from local RPM
+  ansible.builtin.dnf:
+    name: /tmp/containerlab_{{ containerlab_version }}_linux_amd64.rpm
+    state: present
+    disable_gpg_check: true
+  args:
+    creates: /usr/bin/containerlab
+  when: _clab_rpm_download is not skipped
+
+# ── 3. Topology directory ─────────────────────────────────────────────────────
+
+- name: Create topology directory and images subdirectory
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ containerlab_topology_dir }}"
+    - "{{ containerlab_topology_dir }}/images"
+    - "{{ containerlab_topology_dir }}/configs"
+
+# ── 4. Pull vrnetlab OCI tarballs from GCS ───────────────────────────────────
+
+- name: Pull vrnetlab OCI tarballs from GCS cache
+  ansible.builtin.command:
+    cmd: >
+      gcloud storage cp
+      gs://{{ containerlab_cache_bucket }}/images/{{ item.kind }}/{{ item.image_tag }}/*.tar
+      {{ containerlab_topology_dir }}/images/
+  loop: "{{ containerlab_devices }}"
+  register: _gcs_image_pull
+  ignore_errors: true
+  changed_when: _gcs_image_pull.rc == 0
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# ── 5. Load images into Docker ────────────────────────────────────────────────
+
+- name: Find OCI tarballs in images directory
+  ansible.builtin.find:
+    paths: "{{ containerlab_topology_dir }}/images"
+    patterns: "*.tar"
+  register: _image_tarballs
+
+- name: Load OCI tarballs into Docker
+  ansible.builtin.command:
+    cmd: docker load -i {{ item.path }}
+  loop: "{{ _image_tarballs.files }}"
+  ignore_errors: true
+  changed_when: true
+
+# ── 6. Pull startup configs from GCS ─────────────────────────────────────────
+
+- name: Pull startup configs from GCS cache
+  ansible.builtin.command:
+    cmd: >
+      gcloud storage cp -r
+      gs://{{ containerlab_cache_bucket }}/configs/{{ item.kind }}/{{ item.image_tag }}/
+      {{ containerlab_topology_dir }}/configs/
+  loop: "{{ containerlab_devices }}"
+  register: _gcs_config_pull
+  ignore_errors: true
+  changed_when: _gcs_config_pull.rc == 0
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# ── 7. Template topology YAML ─────────────────────────────────────────────────
+
+- name: Write topology YAML from template
+  ansible.builtin.template:
+    src: topology.clab.yml.j2
+    dest: "{{ containerlab_topology_dir }}/topology.clab.yml"
+    mode: "0644"
+
+# ── 8. Deploy topology ────────────────────────────────────────────────────────
+
+- name: Deploy Containerlab topology
+  ansible.builtin.command:
+    cmd: containerlab deploy -t topology.clab.yml --reconfigure
+    chdir: "{{ containerlab_topology_dir }}"
+  changed_when: true
+
+# ── 9. Verify device reachability ────────────────────────────────────────────
+
+- name: Verify device management SSH reachability
+  ansible.builtin.wait_for:
+    host: "172.20.20.{{ ansible_loop.index + 1 }}"
+    port: 22
+    timeout: 300
+  loop: "{{ containerlab_devices }}"
+  loop_control:
+    extended: true

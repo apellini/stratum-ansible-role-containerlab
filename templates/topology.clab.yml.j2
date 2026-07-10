@@ -1,0 +1,15 @@
+name: stratum-dev
+topology:
+  nodes:
+{% for device in containerlab_devices %}
+    {{ device.name }}:
+      kind: {{ device.kind }}
+      image: vrnetlab/{{ device.kind }}:{{ device.image_tag }}
+{% if device.startup_config is defined %}
+      startup-config: configs/{{ device.name }}.cfg
+{% endif %}
+{% endfor %}
+  links:
+{% for link in containerlab_links %}
+    - endpoints: ["{{ link.endpoints[0] }}", "{{ link.endpoints[1] }}"]
+{% endfor %}

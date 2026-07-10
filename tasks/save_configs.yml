@@ -1,0 +1,24 @@
+---
+# Invoked via --tags save_configs
+# Saves running device configs into the topology directory and pushes to GCS.
+
+- name: Save running configs via Containerlab
+  ansible.builtin.command:
+    cmd: containerlab save -t topology.clab.yml
+    chdir: "{{ containerlab_topology_dir }}"
+  changed_when: true
+  tags:
+    - save_configs
+
+- name: Push saved configs to GCS cache
+  ansible.builtin.command:
+    cmd: >
+      gcloud storage cp -r
+      {{ containerlab_topology_dir }}/configs/
+      gs://{{ containerlab_cache_bucket }}/configs/{{ item.kind }}/{{ item.image_tag }}/
+  loop: "{{ containerlab_devices }}"
+  changed_when: true
+  environment:
+    PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  tags:
+    - save_configs

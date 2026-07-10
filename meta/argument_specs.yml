@@ -1,0 +1,74 @@
+---
+argument_specs:
+  main:
+    short_description: Bootstrap Containerlab on a nested-virt GCE node.
+    description:
+      - Installs Docker CE and the Containerlab CLI.
+      - Pulls vrnetlab OCI images from a GCS cache bucket.
+      - Loads images into Docker, templates the topology YAML, and deploys the lab.
+      - Verifies SSH reachability for each device on the containerlab management network.
+    options:
+      containerlab_version:
+        type: str
+        required: true
+        description:
+          - Containerlab release version to install (e.g. "0.68.0").
+          - Used to build the GitHub releases download URL for the RPM.
+
+      containerlab_cache_bucket:
+        type: str
+        required: true
+        description:
+          - GCS bucket name (without gs:// prefix) holding OCI image tarballs and
+            device startup configs (e.g. "stratum-dev-cache").
+
+      containerlab_topology_dir:
+        type: str
+        required: false
+        default: /opt/stratum/containerlab
+        description:
+          - Absolute path on the target host where topology files, images, and configs
+            are stored.
+
+      containerlab_devices:
+        type: list
+        required: false
+        description:
+          - List of network device definitions included in the lab topology.
+          - Each entry must supply kind, name, and image_tag.
+          - An optional startup_config key triggers the startup-config topology field.
+        elements: dict
+        options:
+          kind:
+            type: str
+            required: true
+            description: Containerlab device kind (e.g. "cisco_n9kv").
+          name:
+            type: str
+            required: true
+            description: Unique node name in the topology (e.g. "n9kv-1").
+          image_tag:
+            type: str
+            required: true
+            description: OCI image tag matching the vrnetlab image in GCS cache.
+          startup_config:
+            type: str
+            required: false
+            description: >
+              If defined, a startup-config entry pointing to
+              configs/<name>.cfg is added to the topology node.
+
+      containerlab_links:
+        type: list
+        required: false
+        description:
+          - List of point-to-point links between topology nodes.
+          - Each entry must supply an endpoints list with exactly two interface strings
+            in the form "node:interface" (e.g. "n9kv-1:eth1").
+        elements: dict
+        options:
+          endpoints:
+            type: list
+            required: true
+            description: Two-element list of "node:interface" strings.
+            elements: str

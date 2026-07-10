@@ -1,0 +1,48 @@
+---
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install toolchain
+        run: |
+          pip install ansible-core ansible-lint yamllint
+
+      - name: Symlink role to its namespace path (required for syntax-check)
+        run: |
+          mkdir -p ~/.ansible/roles
+          ln -s "${GITHUB_WORKSPACE}" ~/.ansible/roles/apellini.containerlab
+
+      - name: yamllint
+        run: yamllint -d relaxed .
+
+      - name: ansible-lint
+        run: ansible-lint --profile=production
+
+      - name: Syntax check (stub inventory)
+        run: |
+          cat > /tmp/stub-inventory.yml << 'INV'
+          all:
+            hosts:
+              containerlab_stub:
+                ansible_connection: local
+          INV
+          ansible-playbook -i /tmp/stub-inventory.yml --syntax-check tests/test.yml

@@ -1,0 +1,13 @@
+---
+containerlab_version: ""
+containerlab_cache_bucket: ""
+containerlab_topology_dir: /opt/stratum/containerlab
+containerlab_devices:
+  - kind: cisco_n9kv
+    name: n9kv-1
+    image_tag: ""
+  - kind: cisco_n9kv
+    name: n9kv-2
+    image_tag: ""
+containerlab_links:
+  - endpoints: ["n9kv-1:eth1", "n9kv-2:eth1"]

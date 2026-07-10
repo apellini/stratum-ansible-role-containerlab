@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: containerlab
+  author: apellini
+  description: >
+    Bootstrap Containerlab on a nested-virt GCE node: installs Docker CE and
+    the Containerlab CLI, pulls vrnetlab OCI images from GCS cache, loads them
+    into Docker, templates the topology YAML, deploys the lab, and verifies
+    device reachability. Soft-skips image and config pulls when GCS paths are empty.
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+  galaxy_tags:
+    - containerlab
+    - networking
+    - vrnetlab
+    - stratum
+dependencies: []
