@@ -36,23 +36,21 @@
 # ── 2. Containerlab CLI ───────────────────────────────────────────────────────
 
 - name: Download Containerlab RPM from GitHub releases
+  vars:
+    _clab_fn: "containerlab_{{ containerlab_version }}_linux_amd64.rpm"
+    _clab_base: "https://github.com/srl-labs/containerlab/releases/download"
   ansible.builtin.get_url:
-    url: >-
-      https://github.com/srl-labs/containerlab/releases/download/v{{ containerlab_version }}/containerlab_{{ containerlab_version }}_linux_amd64.rpm
-    dest: /tmp/containerlab_{{ containerlab_version }}_linux_amd64.rpm
+    url: "{{ _clab_base }}/v{{ containerlab_version }}/{{ _clab_fn }}"
+    dest: "/tmp/{{ _clab_fn }}"
     mode: "0644"
-  when: not (ansible_facts['ansible_local'] is defined and
-             (containerlab_topology_dir ~ '/../containerlab') is exists)
   register: _clab_rpm_download
 
 - name: Install Containerlab from local RPM
   ansible.builtin.dnf:
-    name: /tmp/containerlab_{{ containerlab_version }}_linux_amd64.rpm
+    name: "/tmp/containerlab_{{ containerlab_version }}_linux_amd64.rpm"
     state: present
     disable_gpg_check: true
-  args:
-    creates: /usr/bin/containerlab
-  when: _clab_rpm_download is not skipped
+  when: not (ansible_facts.packages is defined and 'containerlab' in ansible_facts.packages)
 
 # ── 3. Topology directory ─────────────────────────────────────────────────────
 
@@ -93,7 +91,6 @@
   ansible.builtin.command:
     cmd: docker load -i {{ item.path }}
   loop: "{{ _image_tarballs.files }}"
-  ignore_errors: true
   changed_when: true
 
 # ── 6. Pull startup configs from GCS ─────────────────────────────────────────
