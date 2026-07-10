@@ -123,6 +123,7 @@
     cmd: containerlab deploy -t topology.clab.yml --reconfigure
     chdir: "{{ containerlab_topology_dir }}"
   changed_when: true
+  when: _image_tarballs.files | length > 0
 
 # ── 9. Verify device reachability ────────────────────────────────────────────
 
@@ -134,3 +135,4 @@
   loop: "{{ containerlab_devices }}"
   loop_control:
     extended: true
+  when: _image_tarballs.files | length > 0
